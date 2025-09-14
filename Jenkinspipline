@@ -1,0 +1,68 @@
+pipeline {
+    agent any
+    tools {
+        maven "mymaven"
+    }
+
+    stages {
+        stage('Cleanws') {
+            steps {
+                cleanWs()
+            }
+        }
+        stage ('Code') {
+            steps {
+                git "https://github.com/abdulshaik0811/dockerwebapp.git"
+            }
+        }
+        stage ('Build') {
+            steps {
+                sh "mvn clean package"
+                sh "cp -r target Docker-app"
+            }
+        }
+        stage ('CQA') {
+            steps {
+                withSonarQubeEnv('mysonar') {
+                    sh "mvn clean verify sonar:sonar -Dsonar.projectKey=myproject"
+                }
+            }
+        }
+        stage ('Quality Gates') {
+            steps {
+                script {
+                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar'
+                }
+            }
+        }
+        stage ('Artifact') {
+            steps {
+                nexusArtifactUploader artifacts: [[artifactId: 'vprofile', classifier: '', file: 'target/vprofile-v2.war', type: 'war']], credentialsId: 'nexusnew', groupId: 'com.visualpathit', nexusUrl: '54.209.126.165:8081', nexusVersion: 'nexus3', protocol: 'http', repository: 'myrepo', version: 'v2'
+            }
+        }
+        stage ('Images') {
+            steps {
+                sh 'docker build -t app-image Docker-app'
+                sh 'docker build -t db-image Docker-db'
+            }
+        }
+        stage ('Image Scan') {
+            steps{
+                sh 'trivy image app-image >> app-imagereport.txt'
+                sh 'trivy image db-image >> db-imagereport.txt'
+            }
+        }
+        stage ('Deploy') {
+            steps {
+                sh 'docker-compose up -d'
+            }
+        }
+    }
+    post {
+        always{
+            mail to: "shaikabduul36@gmail.com",
+            subject: "Pipeline Status",
+            body: "${currentBuild.currentResult}: Job ${env.JOB_NAME} \n build ${env.BUILD_NUMBER} \n More info at: ${env.BUILD_URL}"
+        }
+    }
+}
