@@ -1,0 +1,16 @@
+---
+version: "3"
+services:
+ devopsdb:
+   container_name: devopsdb
+   image: db-image
+   ports:
+     - "3306:3306"
+
+ application:
+   container_name: appcontainer
+   image: app-image
+   ports:
+     - "1234:8080"
+   depends_on:
+     - "devopsdb"
